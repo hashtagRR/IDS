@@ -1,11 +1,8 @@
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
 from sklearn import tree
-from sklearn import svm
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
-from tqdm import tqdm
 
 import time
 
@@ -40,27 +37,15 @@ raw_data = pd.read_csv("E:\stuff\DS\CICIDS2018.csv", usecols=columns, index_col=
 x = raw_data.drop(columns=["Y"])
 y = raw_data["Y"]
 
-X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42) 
-
-# RandomForest Classifier
-type_1 = "Random Forrest"
-clf_rf = RandomForestClassifier(n_estimators=45)
-clf_rf.fit(X_train, y_train)
+x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25, random_state=50) 
 
 # Decision Tree Classifier
-type_2 = "Decision Tree"
+type = "Decision Tree"
 clf_dt = tree.DecisionTreeClassifier()
-clf_dt = clf_dt.fit(X_train, y_train)
-
-#SVM Classifier
-type_3 = "SVM"
-clf_svm = svm.SVC()
-clf_svm.fit(X_train, y_train)
+clf_dt = clf_dt.fit(x_train, y_train)
 
 # Make predictions on the test set
-y_pred_rf = clf_rf.predict(X_test)
-y_pred_dt = clf_dt.predict(X_test)
-y_pred_svm = clf_svm.predict(X_test)
+y_pred_dt = clf_dt.predict(x_test)
 
 # Evaluate the model
 def evaluation(y_test, y_pred, type):
@@ -68,29 +53,24 @@ def evaluation(y_test, y_pred, type):
     precision = precision_score(y_test, y_pred, average='weighted')
     recall = recall_score(y_test, y_pred, average='weighted')
     f1 = f1_score(y_test, y_pred, average='weighted')
-    #confusion = confusion_matrix(y_test, y_pred)
+    confusion = confusion_matrix(y_test, y_pred)
 
     print(type)
     print("Accuracy:", accuracy)
     print("Precision:", precision)
     print("Recall:", recall)
     print("F1 Score:", f1)
-    #print("Confusion Matrix:", confusion)
+    print("Confusion Matrix:\n", confusion)
     print(" ")
 
-
-#evaluation(y_test, y_pred_rf, type_1)
-
-evaluation(y_test, y_pred_dt, type_2)
+evaluation(y_test, y_pred_dt, type)
 tree.plot_tree(clf_dt)
-#plt.show()
-
-#evaluation(y_test, y_pred_svm, type_3)
+plt.show()
 
 #end timing
 end_time = time.time()
 
 # Calculate the Application time
-program_time = end_time - start_time\
+program_time = end_time - start_time
 
 print(f'Program Time: {program_time} seconds')
