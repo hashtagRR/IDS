@@ -2,11 +2,9 @@
 import pandas as pd
 
 # Modelling
-import xgboost as xgb
+from sklearn.ensemble import AdaBoostClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
-
-from sklearn.preprocessing import LabelEncoder
 
 import time
 
@@ -43,21 +41,13 @@ y = raw_data["Y"]
 
 x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.3, random_state=50) 
 
-#encoding for the XGB model. This is required for the latest version of XGB library.
-#le = LabelEncoder()
-#y_train = le.fit_transform(y_train)
-
-#XG Boost Classifier
-type = "XG Boost"
-
-clf_xgb = xgb.XGBClassifier(n_jobs=1).fit(x_train, y_train)
-predictions = clf_xgb.predict(x_test)
-
-#clf_gb = GradientBoostingClassifier(n_estimators=100, learning_rate=1.0, max_depth=1, random_state=0).fit(x_train, y_train)
-#clf_gb.score(x_test, y_test)
+#Ada Boost Classifier
+type = "Ada Boost"
+clf_ab = AdaBoostClassifier(n_estimators=50, learning_rate=1)
+model = clf_ab.fit(x_train, y_train)
 
 # Make predictions on the test set
-y_pred_xgb = clf_xgb.predict(x_test)
+y_pred_ab = clf_ab.predict(x_test)
 
 # Evaluate the model
 def evaluation(y_test, y_pred, type):
@@ -75,7 +65,7 @@ def evaluation(y_test, y_pred, type):
     print("Confusion Matrix:\n", confusion)
     print(" ")
 
-evaluation(y_test, y_pred_xgb, type)
+evaluation(y_test, y_pred_ab, type)
 
 #end timing
 end_time = time.time()
