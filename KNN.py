@@ -2,14 +2,9 @@
 import pandas as pd
 
 # Modelling
-from sklearn.linear_model import LogisticRegression
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
-
-#Visualizing Confusion Matrix using Heatmap
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
 
 import time
 
@@ -44,17 +39,17 @@ raw_data = pd.read_csv("E:\stuff\DS\CICIDS2018.csv", usecols=columns, index_col=
 x = raw_data.drop(columns=["Y"])
 y = raw_data["Y"]
 
-x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25, random_state=50) 
+x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.3, random_state=50) 
 
-# Logistic Regression Classifier
-type_1 = "Logistic Regression"
-logreg = LogisticRegression(random_state=50)
-logreg.fit(x_train, y_train)
+#KNN Classifier
+type = "KNN"
+clf_knn = KNeighborsClassifier(n_neighbors=100)
+clf_knn.fit(x_train, y_train)
 
 # Make predictions on the test set
-y_pred_lr = logreg.predict(x_test)
+y_pred_nb = clf_knn.predict(x_test)
 
-#Evaluation method
+# Evaluate the model
 def evaluation(y_test, y_pred, type):
     accuracy = accuracy_score(y_test, y_pred)
     precision = precision_score(y_test, y_pred, average='weighted')
@@ -70,17 +65,12 @@ def evaluation(y_test, y_pred, type):
     print("Confusion Matrix:\n", confusion)
     print(" ")
 
-# Evaluate the model
-evaluation(y_test, y_pred_lr, type_1)
-
-#Visualisation
-confusion_df = pd.DataFrame(confusion_matrix, columns=['Predicted Negative', 'Predicted Positive'], index=['Actual Negative', 'Actual Positive'])
-print(confusion_df)
+evaluation(y_test, y_pred_nb, type)
 
 #end timing
 end_time = time.time()
 
 # Calculate the Application time
-program_time = end_time - start_time\
+program_time = end_time - start_time
 
 print(f'Program Time: {program_time} seconds')
