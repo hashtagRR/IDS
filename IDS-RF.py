@@ -1,7 +1,17 @@
+# Data Processing
 import pandas as pd
+
+# Modelling
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, ConfusionMatrixDisplay
+from sklearn.model_selection import RandomizedSearchCV, train_test_split
+from scipy.stats import randint
+
+# Tree Visualisation
+from sklearn.tree import export_graphviz
+from IPython.display import Image, display
+import graphviz
 
 import time
 
@@ -64,6 +74,19 @@ def evaluation(y_test, y_pred, type):
 
 
 evaluation(y_test, y_pred_rf, type_1)
+
+'''
+# Export the first five decision trees from the forest
+i=0
+while i<5:
+    tree = clf_rf.estimators_[i]
+    dot_data = export_graphviz(tree, feature_names=x_train.columns, filled=True, max_depth=2, impurity=False, proportion=True)
+    graph = graphviz.Source(dot_data)
+    #display(graph)
+    filename = f"decision_tree_{i}"
+    graph.render(filename)
+    i+=1
+'''
 
 #end timing
 end_time = time.time()

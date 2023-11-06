@@ -1,8 +1,13 @@
+# Data Processing
 import pandas as pd
+
+# Modelling
 from sklearn import tree
-import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+
+#Tree visualization
+import matplotlib.pyplot as plt
 
 import time
 
@@ -64,8 +69,8 @@ def evaluation(y_test, y_pred, type):
     print(" ")
 
 evaluation(y_test, y_pred_dt, type)
-tree.plot_tree(clf_dt)
-plt.show()
+#tree.plot_tree(clf_dt, fontsize=6)
+#plt.show()
 
 #end timing
 end_time = time.time()
