@@ -46,6 +46,7 @@ y = raw_data["Y"]
 x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.3, random_state=50) 
 
 #Voting Boost Classifier
+type = "Voting > RF, LR, NB"
 clf_lr = LogisticRegression(random_state=1, solver='lbfgs', max_iter=300)
 clf_rf = RandomForestClassifier(random_state=1)
 clf_knn = GaussianNB()
