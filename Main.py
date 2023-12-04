@@ -9,15 +9,16 @@ from sklearn import svm
 from sklearn.ensemble import AdaBoostClassifier
 from sklearn.ensemble import GradientBoostingClassifier
 import xgboost as xgb
+from sklearn.ensemble import StackingClassifier
 
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 from sklearn.model_selection import RandomizedSearchCV, train_test_split
 from scipy.stats import randint
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import OneHotEncoder
 
-# Tree Visualization
-from sklearn.tree import export_graphviz
-import graphviz
+from colorama import init, Fore, Style
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -31,30 +32,39 @@ class IntrusionDetectionSystem:
         self.random_state = random_state
 
     def load_data(self):
-        columns =[
-            "Protocol", "Flow Duration", "Total Fwd Packets", "Total Backward Packets",
-            "Fwd Packets Length Total", "Bwd Packets Length Total", "Fwd Packet Length Max",
-            "Fwd Packet Length Min", "Fwd Packet Length Mean", "Fwd Packet Length Std",
-            "Bwd Packet Length Max", "Bwd Packet Length Min", "Bwd Packet Length Mean",
-            "Bwd Packet Length Std", "Flow Bytes/s", "Flow Packets/s", "Flow IAT Mean",
-            "Flow IAT Std", "Flow IAT Max", "Flow IAT Min", "Fwd IAT Total", "Fwd IAT Mean",
-            "Fwd IAT Std", "Fwd IAT Max", "Fwd IAT Min", "Bwd IAT Total", "Bwd IAT Mean",
-            "Bwd IAT Std", "Bwd IAT Max", "Bwd IAT Min", "Fwd PSH Flags", "Fwd Header Length",
-            "Bwd Header Length", "Fwd Packets/s", "Bwd Packets/s", "Packet Length Min",
-            "Packet Length Max", "Packet Length Mean", "Packet Length Std",
-            "Packet Length Variance", "FIN Flag Count", "SYN Flag Count", "RST Flag Count",
-            "PSH Flag Count", "ACK Flag Count", "URG Flag Count", "ECE Flag Count", "Down/Up Ratio",
-            "Avg Packet Size", "Avg Fwd Segment Size", "Avg Bwd Segment Size", "Subflow Fwd Packets",
-            "Subflow Fwd Bytes", "Subflow Bwd Packets", "Subflow Bwd Bytes", "Init Fwd Win Bytes",
-            "Init Bwd Win Bytes", "Fwd Act Data Packets", "Fwd Seg Size Min", "Active Mean",
-            "Active Std", "Active Max", "Active Min", "Idle Mean", "Idle Std", "Idle Max", "Idle Min", "Y"
-         ]
+        columns = ['id', 'dur', 'proto', 'service', 'state', 'spkts', 'dpkts', 'sbytes', 
+                   'dbytes', 'rate', 'sttl', 'dttl', 'sload', 'dload', 'sloss', 'dloss', 
+                   'sinpkt', 'dinpkt', 'sjit', 'djit', 'swin', 'stcpb', 'dtcpb', 'dwin', 
+                   'tcprtt', 'synack', 'ackdat', 'smean', 'dmean', 'trans_depth', 'response_body_len', 
+                   'ct_srv_src', 'ct_state_ttl', 'ct_dst_ltm', 'ct_src_dport_ltm', 'ct_dst_sport_ltm', 
+                   'ct_dst_src_ltm', 'is_ftp_login', 'ct_ftp_cmd', 'ct_flw_http_mthd', 'ct_src_ltm', 
+                   'ct_srv_dst', 'is_sm_ips_ports', 'attack_cat', 'label'
+                   ]
+
+
         self.raw_data = pd.read_csv(self.data_file, usecols=columns, index_col=None)
+    
+    def encode_non_numerics(self):
+        # Identify categorical columns
+        categorical_columns = ['proto', 'service', 'state', 'attack_cat']
+
+        # One-hot encode categorical columns
+        encoder = OneHotEncoder(drop='first', sparse=False)
+        encoded_features = encoder.fit_transform(self.raw_data[categorical_columns])
+
+        # Replace the original categorical columns with the encoded features
+        self.raw_data = pd.concat([self.raw_data, pd.DataFrame(encoded_features, columns=encoder.get_feature_names_out(categorical_columns))], axis=1)
+        self.raw_data = self.raw_data.drop(columns=categorical_columns)
 
     def split_data(self):
-        x = self.raw_data.drop(columns=["Y"])
-        y = self.raw_data["Y"]
+        x = self.raw_data.drop(columns=["label"])
+        y = self.raw_data["label"]
         self.x_train, self.x_test, self.y_train, self.y_test = train_test_split(x, y, test_size=self.test_size, random_state=self.random_state)
+
+    def normalize_dataset(self):
+        scaler = MinMaxScaler()
+        self.x_train = scaler.fit_transform(self.x_train)
+        self.x_test = scaler.transform(self.x_test)
 
     def train_decision_tree_classifier(self):
         type = "Decision Tree"
@@ -121,13 +131,25 @@ class IntrusionDetectionSystem:
 
     def train_voting_classifier(self):
         type = "Voting > RF, DT, XGB"
-        clf_lr = xgb.XGBClassifier(n_jobs=4)
+        clf_xgb = xgb.XGBClassifier(n_jobs=4)
         clf_rf = RandomForestClassifier(random_state=1)
         clf_dt = DecisionTreeClassifier()
-        clf_v = VotingClassifier(estimators=[('lr', clf_lr), ('rf', clf_rf), ('gnb', clf_dt)], voting='soft')
+        clf_v = VotingClassifier(estimators=[('xgb', clf_xgb), ('rf', clf_rf), ('dt', clf_dt)], voting='soft')
         clf_v = clf_v.fit(self.x_train, self.y_train)
         y_pred_v = clf_v.predict(self.x_test)
         self.evaluation(self.y_test, y_pred_v, type)
+
+    def train_stacking_classifier(self):
+        type = "Voting > RF, DT, XGB"
+        clf_xgb = xgb.XGBClassifier(n_jobs=4)
+        clf_rf = RandomForestClassifier(random_state=1)
+        clf_dt = DecisionTreeClassifier()
+        
+        clf_s = StackingClassifier(estimators=[('xgb', clf_xgb), ('rf', clf_rf), ('dt', clf_dt)], final_estimator=LogisticRegression())
+        clf_s = clf_s.fit(self.x_train, self.y_train)
+        y_pred_s = clf_s.predict(self.x_test)
+        self.evaluation(self.y_test, y_pred_s, type)
+
 
     def evaluation(self, y_test, y_pred, type):
         accuracy = accuracy_score(y_test, y_pred)
@@ -136,38 +158,46 @@ class IntrusionDetectionSystem:
         f1 = f1_score(y_test, y_pred, average='weighted')
         #confusion = confusion_matrix(y_test, y_pred)
 
-        print(type)
         print("Accuracy:", accuracy)
         print("Precision:", precision)
         print("Recall:", recall)
-        print("F1 Score:", f1)
+        print("F1 Score:", f1 )
         #print("Confusion Matrix:\n", confusion)
-        print(" ")
-
+    
     def run(self):
-        start_time = time.time()
+        
         self.load_data()
+        self.encode_non_numerics()
         self.split_data()
+        #self.normalize_dataset()
+        
+        classifiers = [
+            (self.train_decision_tree_classifier, "Decision Tree"),
+            (self.train_random_forest_classifier, "Random Forest"),
+            (self.train_naive_bayes_classifier, "Naive Bayes"),
+            (self.train_logistic_regression_classifier, "Logistic Regression"),
+            (self.train_knn_classifier, "KNN"),
+            (self.train_svm_classifier, "SVM"),
+            (self.train_AB_classifier, "AdaBoost"),
+            (self.train_gb_classifier, "Gradient Boosting"),
+            (self.train_xgb_classifier, "XGBoost"),
+            (self.train_voting_classifier, "Voting"),
+            (self.train_stacking_classifier, "Stacking")
+             ]
+        
+        for classifier, classifier_type in classifiers:
+            # Timing measurement before training
+            start_time = time.time()
+            print(Fore.RED +f"{classifier_type}\n"+ Style.RESET_ALL, end='', flush=True,)
+            classifier()
 
-        self.train_decision_tree_classifier()
-        self.train_random_forest_classifier()
-        self.train_naive_bayes_classifier()
-        self.train_logistic_regression_classifier()
-        self.train_knn_classifier()
-        self.train_svm_classifier()
-        self.train_AB_classifier()
-        self.train_gb_classifier()
-        self.train_xgb_classifier()
-        self.train_voting_classifier()
-
-        end_time = time.time()
-        program_time = end_time - start_time
-
-        print(f'Program Time: {program_time} seconds')
-
+            # Timing measurement after training
+            end_time = time.time()
+            program_time = end_time - start_time
+            print(Fore.GREEN +f'Program Time: {program_time} seconds \n'+ Style.RESET_ALL)
+        
 if __name__ == "__main__":
-    #data_file = "E:\stuff\DS\CICIDS2018.csv"
-    data_file = "E:\stuff\DS\CICIDS2018-Balanced.csv"
+    data_file = "E:\\stuff\\DS\\NUSW-NB15\\UNSW_NB15_training-set.csv"
     ids = IntrusionDetectionSystem(data_file)
     ids.run()
     
