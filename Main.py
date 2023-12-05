@@ -17,6 +17,9 @@ from sklearn.model_selection import RandomizedSearchCV, train_test_split
 from scipy.stats import randint
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.preprocessing import OneHotEncoder
+from collections import Counter
+from imblearn.combine import SMOTETomek
+
 
 from colorama import init, Fore, Style
 
@@ -26,10 +29,9 @@ warnings.filterwarnings('ignore')
 import time
 
 class IntrusionDetectionSystem:
-    def __init__(self, data_file, test_size=0.25, random_state=50):
-        self.data_file = data_file
-        self.test_size = test_size
-        self.random_state = random_state
+    def __init__(self, train_file, test_file):
+        self.train_file = train_file
+        self.test_file = test_file
 
     def load_data(self):
         columns = ['id', 'dur', 'proto', 'service', 'state', 'spkts', 'dpkts', 'sbytes', 
@@ -42,24 +44,43 @@ class IntrusionDetectionSystem:
                    ]
 
 
-        self.raw_data = pd.read_csv(self.data_file, usecols=columns, index_col=None)
+        self.raw_train_data = pd.read_csv(self.train_file, usecols=columns, index_col=None)
+        self.raw_test_data = pd.read_csv(self.test_file, usecols=columns, index_col=None)
+      
     
     def encode_non_numerics(self):
-        # Identify categorical columns
+         # Identify categorical columns
         categorical_columns = ['proto', 'service', 'state', 'attack_cat']
 
-        # One-hot encode categorical columns
-        encoder = OneHotEncoder(drop='first', sparse=False)
-        encoded_features = encoder.fit_transform(self.raw_data[categorical_columns])
+        # One-hot encode categorical columns for training data
+        encoder = OneHotEncoder(drop='first', sparse=False, handle_unknown='ignore')
 
-        # Replace the original categorical columns with the encoded features
-        self.raw_data = pd.concat([self.raw_data, pd.DataFrame(encoded_features, columns=encoder.get_feature_names_out(categorical_columns))], axis=1)
-        self.raw_data = self.raw_data.drop(columns=categorical_columns)
+        # One-hot encode categorical columns for testing data using the encoder fitted on the training data
+        encoded_train_features = encoder.fit_transform(self.raw_train_data[categorical_columns])
+        encoded_test_features = encoder.transform(self.raw_test_data[categorical_columns])
+
+        # Replace the original categorical columns with the encoded features for training data
+        self.train_data = pd.concat([self.raw_train_data, pd.DataFrame(encoded_train_features, columns=encoder.get_feature_names_out(categorical_columns))], axis=1)
+        self.test_data = pd.concat([self.raw_test_data, pd.DataFrame(encoded_test_features, columns=encoder.get_feature_names_out(categorical_columns))], axis=1)
+       
+        # Replace the original categorical columns with the encoded features for testing data
+        self.train_data = self.train_data.drop(columns=categorical_columns)
+        self.test_data = self.test_data.drop(columns=categorical_columns)
 
     def split_data(self):
-        x = self.raw_data.drop(columns=["label"])
-        y = self.raw_data["label"]
-        self.x_train, self.x_test, self.y_train, self.y_test = train_test_split(x, y, test_size=self.test_size, random_state=self.random_state)
+        x_train = self.train_data.drop(columns=["label"])
+        y_train = self.train_data["label"]
+
+        x_test = self.test_data.drop(columns=["label"])
+        y_test = self.test_data["label"]
+
+        self.x_train, self.x_test, self.y_train, self.y_test = x_train, x_test, y_train, y_test
+
+        print('Original dataset shape %s' % Counter(y_train))
+
+        smt = SMOTETomek(random_state=42)
+        X_res, y_res = smt.fit_resample(x_train, y_train)
+        print('Resampled dataset shape %s' % Counter(y_res))
 
     def normalize_dataset(self):
         scaler = MinMaxScaler()
@@ -102,11 +123,11 @@ class IntrusionDetectionSystem:
         self.evaluation(self.y_test, y_pred_knn, type)
 
     def train_svm_classifier(self):
-        type = "SVM"
+        '''type = "SVM"
         clf_svm = svm.SVC()
         clf_svm.fit(self.x_train, self.y_train)
         y_pred_svm = clf_svm.predict(self.x_test)
-        self.evaluation(self.y_test, y_pred_svm, type)
+        self.evaluation(self.y_test, y_pred_svm, type)'''
 
     def train_AB_classifier(self):
         type = "Ada Boost"
@@ -169,7 +190,7 @@ class IntrusionDetectionSystem:
         self.load_data()
         self.encode_non_numerics()
         self.split_data()
-        #self.normalize_dataset()
+        self.normalize_dataset()
         
         classifiers = [
             (self.train_decision_tree_classifier, "Decision Tree"),
@@ -197,7 +218,8 @@ class IntrusionDetectionSystem:
             print(Fore.GREEN +f'Program Time: {program_time} seconds \n'+ Style.RESET_ALL)
         
 if __name__ == "__main__":
-    data_file = "E:\\stuff\\DS\\NUSW-NB15\\UNSW_NB15_training-set.csv"
-    ids = IntrusionDetectionSystem(data_file)
+    train_file = "E:\\stuff\\DS\\NUSW-NB15\\UNSW_NB15_training-set.csv"
+    test_file = "E:\\stuff\\DS\\NUSW-NB15\\UNSW_NB15_testing-set.csv"
+    ids = IntrusionDetectionSystem(train_file, test_file)
     ids.run()
     
