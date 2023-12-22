@@ -3,24 +3,18 @@ import sys
 import os
 
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import RandomForestClassifier, VotingClassifier
+from sklearn.ensemble import RandomForestClassifier, VotingClassifier, AdaBoostClassifier, GradientBoostingClassifier, StackingClassifier
 from sklearn.naive_bayes import GaussianNB
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression, Kn
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn import svm
-from sklearn.ensemble import AdaBoostClassifier
-from sklearn.ensemble import GradientBoostingClassifier
 import xgboost as xgb
-from sklearn.ensemble import StackingClassifier
 
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, RandomizedSearchCV, KFold, StratifiedKFold, cross_val_score
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
-from sklearn.model_selection import RandomizedSearchCV, train_test_split
 from scipy.stats import randint
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import MinMaxScaler, OneHotEncoder
 from collections import Counter
-from imblearn.combine import SMOTETomek
 from contextlib import contextmanager
 
 from imblearn.over_sampling import SMOTE, ADASYN
@@ -97,76 +91,78 @@ class IntrusionDetectionSystem:
     def balance_dataset(self):
         
         print('Original dataset shape %s' % Counter(self.y_train))
-        u_sample = RandomUnderSampler(sampling_strategy='majority')
-        u_sample = RandomUnderSampler(sampling_strategy=1)
-        self.x_train, self.y_train = u_sample.fit_resample(self.x_train, self.y_train)
+        oversample = SMOTE()
+        self.x_train, self.y_train = oversample.fit_resample(self.x_train, self.y_train)
+        #u_sample = RandomUnderSampler(sampling_strategy='majority')
+        #u_sample = RandomUnderSampler(sampling_strategy=1)
+        #self.x_train, self.y_train = u_sample.fit_resample(self.x_train, self.y_train)
         print('Resampled dataset shape %s' % Counter(self.y_train))
 
     def train_decision_tree_classifier(self):
-        type = "Decision Tree"
         clf_dt = DecisionTreeClassifier()
         clf_dt.fit(self.x_train, self.y_train)
         y_pred_dt = clf_dt.predict(self.x_test)
         self.evaluation(self.y_test, y_pred_dt)
+        self.cross_validation(self.x_train, self.y_train, clf_dt)
 
     def train_random_forest_classifier(self):
-        type = "Random Forest"
         clf_rf = RandomForestClassifier(n_estimators=45)
         clf_rf.fit(self.x_train, self.y_train)
         y_pred_rf = clf_rf.predict(self.x_test)
         self.evaluation(self.y_test, y_pred_rf)
+        self.cross_validation(self.x_train, self.y_train, clf_rf)
 
     def train_naive_bayes_classifier(self):
-        type = "Naive Bayes"
         clf_nb = GaussianNB()
         clf_nb.fit(self.x_train, self.y_train)
         y_pred_nb = clf_nb.predict(self.x_test)
         self.evaluation(self.y_test, y_pred_nb)
+        self.cross_validation(self.x_train, self.y_train, clf_nb)
 
     def train_logistic_regression_classifier(self):
-        type = "Logistic Regression"
         clf_lr = LogisticRegression(random_state=50, solver='lbfgs', max_iter=300)
         clf_lr.fit(self.x_train, self.y_train)
         y_pred_lr = clf_lr.predict(self.x_test)
         self.evaluation(self.y_test, y_pred_lr)
+        self.cross_validation(self.x_train, self.y_train, clf_lr)
 
     def train_knn_classifier(self):
-        type = "KNN"
         clf_knn = KNeighborsClassifier(n_neighbors=100)
         clf_knn.fit(self.x_train, self.y_train)
         y_pred_knn = clf_knn.predict(self.x_test)
         self.evaluation(self.y_test, y_pred_knn)
+        self.cross_validation(self.x_train, self.y_train, clf_knn)
 
     def train_svm_classifier(self):
-        type = "SVM"
         clf_svm = svm.SVC()
         clf_svm.fit(self.x_train, self.y_train)
         y_pred_svm = clf_svm.predict(self.x_test)
         self.evaluation(self.y_test, y_pred_svm)
+        self.cross_validation(self.x_train, self.y_train, clf_svm)
 
     def train_AB_classifier(self):
-        type = "Ada Boost"
         clf_ab = AdaBoostClassifier(n_estimators=50, learning_rate=1)
         clf_ab = clf_ab.fit(self.x_train, self.y_train)
         y_pred_ab = clf_ab.predict(self.x_test)
         self.evaluation(self.y_test, y_pred_ab)
+        self.cross_validation(self.x_train, self.y_train, clf_ab)
 
     def train_gb_classifier(self):
-        type = "Gradient Boost"
         clf_gb = GradientBoostingClassifier(n_estimators=100, learning_rate=1.0, max_depth=1, random_state=0)
         clf_gb = clf_gb.fit(self.x_train, self.y_train)
         y_pred_gb = clf_gb.predict(self.x_test)
         self.evaluation(self.y_test, y_pred_gb)
+        self.cross_validation(self.x_train, self.y_train, clf_gb)
 
     def train_xgb_classifier(self):
-        type = "XG Boost"
         clf_xgb = xgb.XGBClassifier(n_jobs=16, eval_metric='mlogloss')
         clf_xgb = clf_xgb.fit(self.x_train, self.y_train)
         y_pred_xgb = clf_xgb.predict(self.x_test)
         self.evaluation(self.y_test, y_pred_xgb)
+        self.cross_validation(self.x_train, self.y_train, clf_xgb)
 
     def train_voting_classifier(self):
-        type = "Voting > RF, DT, XGB"
+        #type = "Voting > RF, DT, XGB"
         clf_xgb = xgb.XGBClassifier(n_jobs=16, eval_metric='mlogloss')
         clf_rf = RandomForestClassifier(random_state=1)
         clf_dt = DecisionTreeClassifier()
@@ -174,9 +170,10 @@ class IntrusionDetectionSystem:
         clf_v = clf_v.fit(self.x_train, self.y_train)
         y_pred_v = clf_v.predict(self.x_test)
         self.evaluation(self.y_test, y_pred_v)
+        self.cross_validation(self.x_train, self.y_train, clf_v)
 
     def train_stacking_classifier(self):
-        type = "Voting > RF, DT, XGB"
+        #type = "Stacking > RF, DT, XGB"
         clf_xgb = xgb.XGBClassifier(n_jobs=16, eval_metric='mlogloss')
         clf_rf = RandomForestClassifier(random_state=1)
         clf_dt = DecisionTreeClassifier()
@@ -185,7 +182,7 @@ class IntrusionDetectionSystem:
         clf_s = clf_s.fit(self.x_train, self.y_train)
         y_pred_s = clf_s.predict(self.x_test)
         self.evaluation(self.y_test, y_pred_s)
-
+        self.cross_validation(self.x_train, self.y_train, clf_s)
 
     def evaluation(self, y_test, y_pred):
         accuracy = accuracy_score(y_test, y_pred)
@@ -200,6 +197,14 @@ class IntrusionDetectionSystem:
         print("F1 Score:", f1 )
         #print("Confusion Matrix:\n", confusion)
     
+    def cross_validation(self, x_train, y_train, clf):
+        #k_folds = KFold(n_splits = 10)
+        sk_folds = StratifiedKFold(n_splits = 10)
+        scores = cross_val_score(clf, x_train, y_train, cv = sk_folds)
+        print("Cross Validation Scores: ", scores)
+        print("Average CV Score: ", scores.mean())
+        print("Number of CV Scores used in Average: ", len(scores))
+
     def run(self):
         
         self.load_data()
