@@ -5,7 +5,7 @@ import os
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier, VotingClassifier, AdaBoostClassifier, GradientBoostingClassifier, StackingClassifier
 from sklearn.naive_bayes import GaussianNB
-from sklearn.linear_model import LogisticRegression, Kn
+from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn import svm
 import xgboost as xgb
@@ -34,7 +34,7 @@ class IntrusionDetectionSystem:
         self.train_file = train_file
         self.test_file = test_file
 
-    def load_data(self):
+    def load_dataset(self):
         columns = ['id', 'dur', 'proto', 'service', 'state', 'spkts', 'dpkts', 'sbytes', 
                    'dbytes', 'rate', 'sttl', 'dttl', 'sload', 'dload', 'sloss', 'dloss', 
                    'sinpkt', 'dinpkt', 'sjit', 'djit', 'swin', 'stcpb', 'dtcpb', 'dwin', 
@@ -44,55 +44,92 @@ class IntrusionDetectionSystem:
                    'ct_srv_dst', 'is_sm_ips_ports', 'attack_cat', 'label'
                    ]
 
-
         self.raw_train_data = pd.read_csv(self.train_file, usecols=columns, index_col=None)
         self.raw_test_data = pd.read_csv(self.test_file, usecols=columns, index_col=None)
       
-    
     def encode_non_numerics(self):
-         # Identify categorical columns
-        categorical_columns = ['proto', 'service', 'state', 'attack_cat']
+        # Identify non numerical columns
+        non_numerical_columns = self.raw_train_data.select_dtypes(exclude=['float64', 'int64']).columns.tolist()
+        
+        # Identify numerical columns
         numerical_columns = self.raw_train_data.select_dtypes(include=['float64', 'int64']).columns.tolist()
-
+        
+        # Initialize OneHotEncoder with specified parameters
         encoder = OneHotEncoder(drop='first', sparse=False, handle_unknown='ignore')
+        #encoder = OneHotEncoder(sparse=False, handle_unknown='ignore')
 
-        # One-hot encode categorical columns
-        encoded_train_features = encoder.fit_transform(self.raw_train_data[categorical_columns])
-        encoded_test_features = encoder.transform(self.raw_test_data[categorical_columns])
+        '''
+        # Need to measure the perfomance with dropping the first column prior to doing so as unique data might get dropped
+        # Get the dropped columns
+        dropped_columns = []
+        for i, column in enumerate(non_numerical_columns):
+            categories = self.raw_train_data[column].unique()
+            if len(categories) > 1:
+                dropped_columns.append(f"Dropped column for {column}: {categories[0]}")
 
-        # Replace the original categorical columns with the encoded features for training data
-        self.train_data = pd.concat([self.raw_train_data[numerical_columns], pd.DataFrame(encoded_train_features, columns=encoder.get_feature_names_out(categorical_columns))], axis=1)
-        self.test_data = pd.concat([self.raw_test_data[numerical_columns], pd.DataFrame(encoded_test_features, columns=encoder.get_feature_names_out(categorical_columns))], axis=1)
+        # Print the list of dropped columns
+        for column_info in dropped_columns:
+            print(column_info)
+        '''
+
+        # One-hot encode categorical columns for training and testing data
+        encoded_train_features = encoder.fit_transform(self.raw_train_data[non_numerical_columns])
+        encoded_test_features = encoder.transform(self.raw_test_data[non_numerical_columns])
+
+        # Concatenate numerical columns and encoded categorical columns for training data
+        self.train_data = pd.concat([self.raw_train_data[numerical_columns], 
+                                     pd.DataFrame(encoded_train_features, columns=encoder.get_feature_names_out(non_numerical_columns))
+                                     ], axis=1)
+
+        # Concatenate numerical columns and encoded categorical columns for test data
+        self.test_data = pd.concat([self.raw_test_data[numerical_columns], 
+                                    pd.DataFrame(encoded_test_features, columns=encoder.get_feature_names_out(non_numerical_columns))
+                                    ], axis=1)
        
-        # Replace the original categorical columns with the encoded features for testing data
-        #self.train_data = self.train_data.drop(columns=categorical_columns)
-        #self.test_data = self.test_data.drop(columns=categorical_columns)
+    def split_dataset(self):
+        columns_to_drop = ['id', 'label'] + [col for col in self.train_data.columns if 'attack_cat_' in col]
 
-    def split_data(self):
-        x_train = self.train_data.drop(columns=["label"])
-        y_train = self.train_data["label"]
+        x_train = self.train_data.drop(columns=columns_to_drop)
+        y_train = self.train_data['label']
 
-        x_test = self.test_data.drop(columns=["label"])
-        y_test = self.test_data["label"]
+        y_train_attack_cat = self.train_data[[col for col in self.train_data.columns if 'attack_cat' in col]]
+       
+        x_test = self.test_data.drop(columns=columns_to_drop)
+        y_test = self.test_data['label']
+        y_test_attack_cat = self.test_data[[col for col in self.test_data.columns if 'attack_cat' in col]]
 
-        self.x_train, self.x_test, self.y_train, self.y_test = x_train, x_test, y_train, y_test
+        self.x_train, self.x_test = x_train, x_test
+        self.y_train, self.y_test = y_train, y_test
+        self.y_train_attack_cat, self.y_test_attack_cat = y_train_attack_cat, y_test_attack_cat
+
 
     def normalize_dataset(self):
         scaler = MinMaxScaler()
 
         # Separate numerical columns for normalization
-        numerical_columns_train = self.train_data.select_dtypes(include=['float64', 'int64']).columns.tolist()
-        numerical_columns_test = self.test_data.select_dtypes(include=['float64', 'int64']).columns.tolist()
-        
+        numerical_columns_train = self.x_train.select_dtypes(include=['float64', 'int64']).columns.tolist()
+        numerical_columns_test = self.x_test.select_dtypes(include=['float64', 'int64']).columns.tolist()
+
         # Normalize only the numerical columns
-        self.x_train[numerical_columns_train] = scaler.fit_transform(self.train_data[numerical_columns_train])
-        self.x_test[numerical_columns_test] = scaler.transform(self.test_data[numerical_columns_test])
+        x_train_normalized = pd.DataFrame(scaler.fit_transform(self.x_train[numerical_columns_train]),columns=numerical_columns_train,
+                                          index=self.x_train.index)
+        
+        x_test_normalized = pd.DataFrame(scaler.transform(self.x_test[numerical_columns_train]),columns=numerical_columns_train,
+                                          index=self.x_test.index)
+
+        # Drop the original numerical columns from the datasets
+        self.x_train = self.x_train.drop(columns=numerical_columns_train)
+        self.x_test = self.x_test.drop(columns=numerical_columns_test)
+        
+        # Concatenate numerical columns and encoded categorical columns for train and test data
+        self.x_train = pd.concat([x_train_normalized, self.x_train], axis=1)
+        self.x_test = pd.concat([x_test_normalized, self.x_test], axis=1)
 
     def balance_dataset(self):
         
         print('Original dataset shape %s' % Counter(self.y_train))
-        oversample = SMOTE()
-        self.x_train, self.y_train = oversample.fit_resample(self.x_train, self.y_train)
+        algo = SMOTEENN() 
+        self.x_train, self.y_train = algo.fit_resample(self.x_train, self.y_train)
         #u_sample = RandomUnderSampler(sampling_strategy='majority')
         #u_sample = RandomUnderSampler(sampling_strategy=1)
         #self.x_train, self.y_train = u_sample.fit_resample(self.x_train, self.y_train)
@@ -163,10 +200,10 @@ class IntrusionDetectionSystem:
 
     def train_voting_classifier(self):
         #type = "Voting > RF, DT, XGB"
-        clf_xgb = xgb.XGBClassifier(n_jobs=16, eval_metric='mlogloss')
+        clf_ab = AdaBoostClassifier(n_estimators=50, learning_rate=1)
         clf_rf = RandomForestClassifier(random_state=1)
-        clf_dt = DecisionTreeClassifier()
-        clf_v = VotingClassifier(estimators=[('xgb', clf_xgb), ('rf', clf_rf), ('dt', clf_dt)], voting='soft')
+        clf_gb = GradientBoostingClassifier(n_estimators=100, learning_rate=1.0, max_depth=1, random_state=0)
+        clf_v = VotingClassifier(estimators=[('xgb', clf_ab), ('rf', clf_rf), ('dt', clf_gb)], voting='soft')
         clf_v = clf_v.fit(self.x_train, self.y_train)
         y_pred_v = clf_v.predict(self.x_test)
         self.evaluation(self.y_test, y_pred_v)
@@ -174,11 +211,11 @@ class IntrusionDetectionSystem:
 
     def train_stacking_classifier(self):
         #type = "Stacking > RF, DT, XGB"
-        clf_xgb = xgb.XGBClassifier(n_jobs=16, eval_metric='mlogloss')
+        clf_ab = AdaBoostClassifier(n_estimators=50, learning_rate=1)
         clf_rf = RandomForestClassifier(random_state=1)
-        clf_dt = DecisionTreeClassifier()
+        clf_gb = GradientBoostingClassifier(n_estimators=100, learning_rate=1.0, max_depth=1, random_state=0)
         
-        clf_s = StackingClassifier(estimators=[('xgb', clf_xgb), ('rf', clf_rf), ('dt', clf_dt)], final_estimator=LogisticRegression())
+        clf_s = StackingClassifier(estimators=[('AB', clf_ab), ('rf', clf_rf), ('GB', clf_gb)], final_estimator=xgb.XGBClassifier(n_jobs=16, eval_metric='mlogloss'))
         clf_s = clf_s.fit(self.x_train, self.y_train)
         y_pred_s = clf_s.predict(self.x_test)
         self.evaluation(self.y_test, y_pred_s)
@@ -198,18 +235,18 @@ class IntrusionDetectionSystem:
         #print("Confusion Matrix:\n", confusion)
     
     def cross_validation(self, x_train, y_train, clf):
-        #k_folds = KFold(n_splits = 10)
+        '''k_folds = KFold(n_splits = 10)
         sk_folds = StratifiedKFold(n_splits = 10)
         scores = cross_val_score(clf, x_train, y_train, cv = sk_folds)
         print("Cross Validation Scores: ", scores)
         print("Average CV Score: ", scores.mean())
-        print("Number of CV Scores used in Average: ", len(scores))
+        print("Number of CV Scores used in Average: ", len(scores))'''
 
     def run(self):
         
-        self.load_data()
+        self.load_dataset()
         self.encode_non_numerics()
-        self.split_data()
+        self.split_dataset()
         self.normalize_dataset()
         self.balance_dataset()
         
@@ -219,7 +256,7 @@ class IntrusionDetectionSystem:
             (self.train_naive_bayes_classifier, "Naive Bayes"),
             (self.train_logistic_regression_classifier, "Logistic Regression"),
             (self.train_knn_classifier, "KNN"),
-            (self.train_svm_classifier, "SVM"),
+            #(self.train_svm_classifier, "SVM"),
             (self.train_AB_classifier, "AdaBoost"),
             (self.train_gb_classifier, "Gradient Boosting"),
             (self.train_xgb_classifier, "XGBoost"),
