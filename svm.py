@@ -19,7 +19,7 @@ from contextlib import contextmanager
 
 from imblearn.over_sampling import SMOTE, ADASYN
 from imblearn.combine import SMOTETomek, SMOTEENN
-from imblearn.under_sampling import RandomUnderSampler
+from imblearn.under_sampling import RandomUnderSampler, NearMiss, EditedNearestNeighbours
 
 
 from colorama import init, Fore, Style
@@ -114,7 +114,7 @@ class IntrusionDetectionSystem:
     def balance_dataset(self):
         
         print('Original dataset shape %s' % Counter(self.y_train))
-        algo = ADASYN()
+        algo = NearMiss(sampling_strategy='auto')
         self.x_train, self.y_train = algo.fit_resample(self.x_train, self.y_train)
         #u_sample = RandomUnderSampler(sampling_strategy='majority')
         #u_sample = RandomUnderSampler(sampling_strategy=1)

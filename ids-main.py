@@ -19,7 +19,7 @@ from contextlib import contextmanager
 
 from imblearn.over_sampling import SMOTE, ADASYN
 from imblearn.combine import SMOTETomek, SMOTEENN
-from imblearn.under_sampling import RandomUnderSampler
+from imblearn.under_sampling import RandomUnderSampler, NearMiss, EditedNearestNeighbours
 
 
 from colorama import init, Fore, Style
@@ -51,6 +51,10 @@ class IntrusionDetectionSystem:
         # Identify non numerical columns
         non_numerical_columns = self.raw_train_data.select_dtypes(exclude=['float64', 'int64']).columns.tolist()
         
+        # Drop 'attack_cat' from the list if present
+        if 'attack_cat' in non_numerical_columns:
+            non_numerical_columns.remove('attack_cat')
+
         # Identify numerical columns
         numerical_columns = self.raw_train_data.select_dtypes(include=['float64', 'int64']).columns.tolist()
         
@@ -76,31 +80,33 @@ class IntrusionDetectionSystem:
         encoded_train_features = encoder.fit_transform(self.raw_train_data[non_numerical_columns])
         encoded_test_features = encoder.transform(self.raw_test_data[non_numerical_columns])
 
-        # Concatenate numerical columns and encoded categorical columns for training data
+       # Concatenate numerical columns, encoded categorical columns, and 'attack_cat' for training data
         self.train_data = pd.concat([self.raw_train_data[numerical_columns], 
-                                     pd.DataFrame(encoded_train_features, columns=encoder.get_feature_names_out(non_numerical_columns))
-                                     ], axis=1)
+                                pd.DataFrame(encoded_train_features, columns=encoder.get_feature_names_out(non_numerical_columns)),
+                                self.raw_train_data['attack_cat']
+                                ], axis=1)
 
-        # Concatenate numerical columns and encoded categorical columns for test data
+        # Concatenate numerical columns, encoded categorical columns, and 'attack_cat' for test data
         self.test_data = pd.concat([self.raw_test_data[numerical_columns], 
-                                    pd.DataFrame(encoded_test_features, columns=encoder.get_feature_names_out(non_numerical_columns))
-                                    ], axis=1)
+                               pd.DataFrame(encoded_test_features, columns=encoder.get_feature_names_out(non_numerical_columns)),
+                               self.raw_test_data['attack_cat']
+                               ], axis=1)
        
     def split_dataset(self):
-        columns_to_drop = ['id', 'label'] + [col for col in self.train_data.columns if 'attack_cat_' in col]
+        columns_to_drop = ['id', 'label', 'attack_cat']
 
         x_train = self.train_data.drop(columns=columns_to_drop)
-        y_train = self.train_data['label']
+        y_train = self.train_data['attack_cat']
 
-        y_train_attack_cat = self.train_data[[col for col in self.train_data.columns if 'attack_cat' in col]]
+        #y_train_attack_cat = self.train_data['attack_cat']
        
         x_test = self.test_data.drop(columns=columns_to_drop)
-        y_test = self.test_data['label']
-        y_test_attack_cat = self.test_data[[col for col in self.test_data.columns if 'attack_cat' in col]]
+        y_test = self.test_data['attack_cat']
+        #y_test_attack_cat = self.test_data['attack_cat']
 
         self.x_train, self.x_test = x_train, x_test
         self.y_train, self.y_test = y_train, y_test
-        self.y_train_attack_cat, self.y_test_attack_cat = y_train_attack_cat, y_test_attack_cat
+        #self.y_train_attack_cat, self.y_test_attack_cat = y_train_attack_cat, y_test_attack_cat
 
 
     def normalize_dataset(self):
@@ -128,11 +134,8 @@ class IntrusionDetectionSystem:
     def balance_dataset(self):
         
         print('Original dataset shape %s' % Counter(self.y_train))
-        algo = SMOTEENN() 
+        algo = ADASYN() 
         self.x_train, self.y_train = algo.fit_resample(self.x_train, self.y_train)
-        #u_sample = RandomUnderSampler(sampling_strategy='majority')
-        #u_sample = RandomUnderSampler(sampling_strategy=1)
-        #self.x_train, self.y_train = u_sample.fit_resample(self.x_train, self.y_train)
         print('Resampled dataset shape %s' % Counter(self.y_train))
 
     def train_decision_tree_classifier(self):
