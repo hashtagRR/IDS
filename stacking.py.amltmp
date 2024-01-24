@@ -134,7 +134,7 @@ class IntrusionDetectionSystem:
     def balance_dataset(self):
         
         print('Original dataset shape %s' % Counter(self.y_train))
-        algo = EditedNearestNeighbours() 
+        algo = SMOTE() 
         self.x_train, self.y_train = algo.fit_resample(self.x_train, self.y_train)
         print('Resampled dataset shape %s' % Counter(self.y_train))
 
@@ -253,7 +253,7 @@ class IntrusionDetectionSystem:
         self.normalize_dataset()
         self.balance_dataset()
         
-        classifiers = [
+        '''classifiers = [
             (self.train_decision_tree_classifier, "Decision Tree"),
             (self.train_random_forest_classifier, "Random Forest"),
             (self.train_naive_bayes_classifier, "Naive Bayes"),
@@ -265,9 +265,9 @@ class IntrusionDetectionSystem:
             (self.train_xgb_classifier, "XGBoost"),
             (self.train_voting_classifier, "Voting"),
             #(self.train_stacking_classifier, "Stacking")
-             ]
+             ]'''
         
-        #classifiers = [(self.train_xgb_classifier, "XGB")]
+        classifiers = [(self.train_stacking_classifier, "Stacking")]
 
         for classifier, classifier_type in classifiers:
             # Timing measurement before training
