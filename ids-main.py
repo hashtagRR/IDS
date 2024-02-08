@@ -281,7 +281,7 @@ class IntrusionDetectionSystem:
             print(Fore.GREEN +f'Program Time: {program_time} seconds \n'+ Style.RESET_ALL)
         
 if __name__ == "__main__":
-    train_file = "/home/azureuser/cloudfiles/code/users/2306143/UNSW_NB15_training-set.csv"
-    test_file = "/home/azureuser/cloudfiles/code/users/2306143/UNSW_NB15_testing-set.csv"
+    train_file = "/home/azureuser/cloudfiles/code/users/IDS/UNSW_NB15_training-set.csv"
+    test_file = "/home/azureuser/cloudfiles/code/users/IDS/UNSW_NB15_testing-set.csv"
     ids = IntrusionDetectionSystem(train_file, test_file)
     ids.run()
